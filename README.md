@@ -1,3 +1,4 @@
+
 # on-core [![Build Status](http://travis-ci.org/RackHD/on-core.svg?branch=master)](https://travis-ci.org/RackHD/on-core) [![Code Climate](https://codeclimate.com/github/RackHD/on-core/badges/gpa.svg)](https://codeclimate.com/github/RackHD/on-core) [![Coverage Status](https://coveralls.io/repos/RackHD/on-core/badge.svg?branch=master&service=github)](https://coveralls.io/github/RackHD/on-core?branch=master)
 
 `on-core` provides common node.js libraries for applications in the RackHD project.
@@ -38,4 +39,4 @@ Defaults to `localhost:8125`.
 
 ## sharedKey
 
-A 32 bit base 64 encoded string, defaults to `qxfO2D3tIJsZACu7UA6Fbw0avowo8r79ALzn+WeuC8M=`.
+A 32 bit base64 encoded string, defaults to `qxfO2D3tIJsZACu7UA6Fbw0avowo8r79ALzn+WeuC8M=`.
