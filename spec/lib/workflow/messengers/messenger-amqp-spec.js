@@ -3,18 +3,15 @@
 'use strict';
 
 describe('Task/TaskGraph AMQP messenger plugin', function () {
-    var taskProtocol;
     var eventsProtocol;
     var taskGraphRunnerProtocol;
     var amqp;
+    var messenger;
+    var Constants;
+    var taskId = 'AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA';
+    var graphId ='BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB'
     var configuration = {
         get: sinon.stub().withArgs('taskgraph-messenger').returns('AMQP')
-    };
-    var taskProtocolMock = {
-        subscribeRun: sinon.stub().resolves(),
-        run: sinon.stub().resolves(),
-        subscribeCancel: sinon.stub().resolves(),
-        cancel: sinon.stub().resolves()
     };
     var eventsProtocolMock = {
         subscribeTaskFinished: sinon.stub().resolves(),
@@ -30,66 +27,115 @@ describe('Task/TaskGraph AMQP messenger plugin', function () {
         helper.setupInjector([
             helper.require('/lib/workflow/messengers/messenger-AMQP'),
             helper.di.simpleWrapper(configuration, 'Services.Configuration'),
-            helper.di.simpleWrapper(taskProtocolMock, 'Protocol.Task'),
             helper.di.simpleWrapper(eventsProtocolMock, 'Protocol.Events'),
             helper.di.simpleWrapper(taskGraphRunnerProtocolMock, 'Protocol.TaskGraphRunner'),
         ]);
-        taskProtocol = helper.injector.get('Protocol.Task');
+        
         eventsProtocol = helper.injector.get('Protocol.Events');
+        Constants = helper.injector.get('Constants');
         taskGraphRunnerProtocol = helper.injector.get('Protocol.TaskGraphRunner');
         amqp = helper.injector.get('Task.Messengers.AMQP');
+        
+        messenger = helper.injector.get('Services.Messenger');
+        sinon.stub(messenger, 'publish');
+        sinon.stub(messenger, 'subscribe');
     });
 
     afterEach(function() {
-        _.forEach(taskProtocol, function(method) {
-            method.reset();
-        });
         _.forEach(eventsProtocol, function(method) {
             method.reset();
         });
         _.forEach(taskGraphRunnerProtocol, function(method) {
             method.reset();
         });
+        messenger.publish.reset();
+        messenger.subscribe.reset();
     });
 
-    it('should wrap the task protocol subscribeRun method', function() {
+    it('should subscribe to run exchange', function() {
+        messenger.subscribe.resolves();
         var callback = function() {};
         return amqp.subscribeRunTask('default', callback)
         .then(function() {
-            expect(taskProtocol.subscribeRun).to.have.been.calledOnce;
-            expect(taskProtocol.subscribeRun).to.have.been.calledWith('default', callback);
-        });
-    });
-
-    it('should wrap the task protocol run method', function() {
-        return amqp.publishRunTask('default', 'testtaskid', 'testgraphid')
-        .then(function() {
-            expect(taskProtocol.run).to.have.been.calledOnce;
-            expect(taskProtocol.run).to.have.been.calledWith(
-                'default',
-                { taskId: 'testtaskid', graphId: 'testgraphid' }
+            expect(messenger.subscribe).to.have.been.calledOnce;
+            expect(messenger.subscribe).to.have.been.calledWith(
+                Constants.Protocol.Exchanges.Task.Name,
+                'default.methods.run', 
+                callback
             );
         });
     });
 
-    it('should wrap the task protocol subscribeCancel  method', function() {
-        var callback = function() {};
-        return amqp.subscribeCancelTask(callback)
+    it('should publish to run exchange', function() {
+        messenger.publish.resolves();
+        return amqp.publishRunTask('default', taskId, graphId)
         .then(function() {
-            expect(taskProtocol.subscribeCancel).to.have.been.calledOnce;
-            expect(taskProtocol.subscribeCancel).to.have.been.calledWith(callback);
+            expect(messenger.publish).to.have.been.calledOnce;
+            expect(messenger.publish).to.have.been.calledWith(
+                Constants.Protocol.Exchanges.Task.Name,
+                'default.methods.run',
+                { taskId: taskId, graphId: graphId }
+            );
         });
     });
 
-    it('should wrap the task protocol cancel method', function() {
-        return amqp.publishCancelTask('testtaskid')
+    it('should subscribe to cancel exchange', function() {
+        messenger.subscribe = sinon.spy(function(exchange, name, callback) {
+            callback({value:'value'});
+            return Promise.resolve();
+        });
+        return amqp.subscribeCancelTask(function() {})
         .then(function() {
-            expect(taskProtocol.cancel).to.have.been.calledOnce;
-            expect(taskProtocol.cancel).to.have.been.calledWith('testtaskid');
+            expect(messenger.subscribe).to.have.been.calledOnce;
+            expect(messenger.subscribe).to.have.been.calledWith(
+                Constants.Protocol.Exchanges.Task.Name,
+                'methods.cancel'
+            );
+        });
+    });
+    
+    it('should subscribe to cancel exchange with known error', function() {
+        messenger.subscribe = sinon.spy(function(exchange, name, callback) {
+            callback({errName:'MyError', errMessage:'errMessage'});
+            return Promise.resolve();
+        });
+        return amqp.subscribeCancelTask(function() {})
+        .then(function() {
+            expect(messenger.subscribe).to.have.been.calledOnce;
+            expect(messenger.subscribe).to.have.been.calledWith(
+                Constants.Protocol.Exchanges.Task.Name,
+                'methods.cancel'
+            );
+        });
+    });
+    
+    it('should subscribe to cancel exchange with unknown error', function() {
+        messenger.subscribe = sinon.spy(function(exchange, name, callback) {
+            callback({errName:'FakeError', errMessage:'errMessage'});
+            return Promise.resolve();
+        });
+        return amqp.subscribeCancelTask(function() {})
+        .then(function() {
+            expect(messenger.subscribe).to.have.been.calledOnce;
+            expect(messenger.subscribe).to.have.been.calledWith(
+                Constants.Protocol.Exchanges.Task.Name,
+                'methods.cancel'
+            );
         });
     });
 
-    it('should wrap the events protocol subscribeTaskFinished method', function() {
+    it('should publisc to cancel exchange', function() {
+        return amqp.publishCancelTask(taskId)
+        .then(function() {
+            expect(messenger.publish).to.have.been.calledOnce;
+            expect(messenger.publish).to.have.been.calledWith(
+                Constants.Protocol.Exchanges.Task.Name,
+                'methods.cancel',
+                {taskId:taskId});
+        });
+    });
+
+    it('should subscribe to task finished exchange', function() {
         var callback = function() {};
         return amqp.subscribeTaskFinished('default', callback)
         .then(function() {
